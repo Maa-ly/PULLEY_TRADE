@@ -15,7 +15,7 @@ if [ $? -eq 0 ]; then
     if [ $? -eq 0 ]; then
         echo " All tests passed!"
         echo ""
-        echo "🎉 Pulley DeFi system is ready to deploy!"
+        echo "Pulley DeFi system is ready to deploy!"
         echo ""
         echo "Next steps:"
         echo "- Deploy contracts to testnet: aptos move publish --dev"

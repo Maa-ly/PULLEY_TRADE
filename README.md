@@ -367,54 +367,9 @@ if (hasFunds) {
 - Blocklock automation monitoring
 - Regular system health checks
 
-## 🛣️ Roadmap
 
-### Phase 1: Core Implementation ✅
-- PULLEY insurance token (FA standard)
-- Controller with 15%/85% allocation
-- Trading pool with automation hooks
-- Comprehensive test suite
 
-### Phase 2: Integration & Automation 🚧
-- Blocklock automation implementation
-- Nodit API integration for P&L tracking
-- AI trading bot development
-- Merkle trading integration
 
-### Phase 3: Advanced Features 📋
-- Multi-asset support
-- Dynamic allocation strategies
-- Advanced risk management
-- Governance token integration
-
-### Phase 4: Ecosystem Expansion 🔮
-- Cross-chain compatibility
-- Institutional features
-- Additional trading protocols
-- Advanced analytics dashboard
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md).
-
-### Development Process
-1. Fork the repository
-2. Create a feature branch
-3. Implement changes with comprehensive tests
-4. Submit a pull request with detailed description
-5. Code review and integration testing
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🆘 Support & Community
-
-- **Documentation**: [docs.pulley.finance](https://docs.pulley.finance)
-- **Discord**: [discord.gg/pulley](https://discord.gg/pulley)  
-- **Twitter**: [@PulleyFinance](https://twitter.com/PulleyFinance)
-- **GitHub**: [github.com/pulley-finance](https://github.com/pulley-finance)
-- **Email**: support@pulley.finance
 
 ## ⚠️ Disclaimer
 
