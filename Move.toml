@@ -1,0 +1,17 @@
+[package]
+name = "Pulley"
+version = "1.0.0"
+authors = []
+
+[addresses]
+pulley = "_"
+
+[dev-addresses]
+pulley = "0x823879c074114afe53e8d1a745ce1388a53ed7144e91611ff5e00909e12d6efa"
+
+[dependencies.AptosFramework]
+git = "https://github.com/aptos-labs/aptos-framework.git"
+rev = "devnet"
+subdir = "aptos-framework"
+
+[dev-dependencies]
