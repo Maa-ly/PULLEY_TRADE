@@ -37,11 +37,30 @@ module pulley::insurance_token {
         total_absorbed_losses: u64,
         profit_collected: u64,
         market_utilization: u64,      // For floating stablecoin price calculation
+        utilization_rate: u64,        // Current utilization rate (basis points)
+        growth_rate: u64,             // Current growth rate (basis points per day)
+        last_growth_update: u64,      // Last time growth was applied
+        insurance_reserve: u64,       // Insurance funds from trading pool
+        total_backing_value: u64,     // Total USD value backing tokens
         authorized_controllers: Table<address, bool>,
+        
+        // Growth parameters
+        base_growth_rate: u64,        // 1% base daily growth
+        utilization_multiplier: u64,  // 0.5% additional per utilization point
+        max_growth_rate: u64,         // 10% max daily growth
+        
+        // Asset backing
+        asset_backing: Table<address, u64>,
+        supported_assets: Table<address, bool>,
+        backing_assets: vector<address>,
+        
+        // Events
         mint_events: EventHandle<MintEvent>,
         burn_events: EventHandle<BurnEvent>,
         loss_absorption_events: EventHandle<LossAbsorptionEvent>,
         profit_deposit_events: EventHandle<ProfitDepositEvent>,
+        growth_events: EventHandle<GrowthEvent>,
+        price_update_events: EventHandle<PriceUpdateEvent>,
     }
 
     /// Events
@@ -68,6 +87,26 @@ module pulley::insurance_token {
     struct ProfitDepositEvent has drop, store {
         profit_amount: u64,
         timestamp: u64,
+    }
+
+    struct GrowthEvent has drop, store {
+        growth_amount: u64,
+        new_insurance_reserve: u64,
+        utilization_rate: u64,
+        timestamp: u64,
+    }
+
+    struct PriceUpdateEvent has drop, store {
+        old_price: u64,
+        new_price: u64,
+        total_supply: u64,
+        total_backing: u64,
+        timestamp: u64,
+    }
+
+    struct AssetSupportUpdatedEvent has drop, store {
+        asset: address,
+        supported: bool,
     }
 
     /// Initialize the PULLEY insurance token using Fungible Asset standard
@@ -101,11 +140,24 @@ module pulley::insurance_token {
             total_absorbed_losses: 0,
             profit_collected: 0,
             market_utilization: 0,
+            utilization_rate: 0,
+            growth_rate: 0,
+            last_growth_update: timestamp::now_microseconds(),
+            insurance_reserve: 0,
+            total_backing_value: 0,
             authorized_controllers: table::new(),
+            base_growth_rate: 100,        // 1% base daily growth (basis points)
+            utilization_multiplier: 50,   // 0.5% additional per utilization point
+            max_growth_rate: 1000,        // 10% max daily growth
+            asset_backing: table::new(),
+            supported_assets: table::new(),
+            backing_assets: vector::empty(),
             mint_events: account::new_event_handle<MintEvent>(admin),
             burn_events: account::new_event_handle<BurnEvent>(admin),
             loss_absorption_events: account::new_event_handle<LossAbsorptionEvent>(admin),
             profit_deposit_events: account::new_event_handle<ProfitDepositEvent>(admin),
+            growth_events: account::new_event_handle<GrowthEvent>(admin),
+            price_update_events: account::new_event_handle<PriceUpdateEvent>(admin),
         });
     }
 
@@ -306,6 +358,249 @@ module pulley::insurance_token {
         assert!(table::contains(&pool.authorized_controllers, controller_addr), E_NOT_AUTHORIZED);
         
         pool.market_utilization = utilization;
+    }
+
+    /// Get current token price (floating, not 1:1)
+    public fun get_current_price(admin_addr: address): u64 acquires InsurancePool {
+        assert!(exists<InsurancePool>(admin_addr), E_NOT_AUTHORIZED);
+        let pool = borrow_global<InsurancePool>(admin_addr);
+        
+        let total_supply = pool.total_insurance_supply + pool.total_external_supply;
+        if (total_supply == 0) {
+            return 100000000 // 1 USD in 8 decimals
+        };
+        
+        // Price increases with growth and utilization
+        // Base price + growth premium + utilization premium
+        let base_price = 100000000; // 1 USD base (8 decimals)
+        
+        // Growth premium based on total growth applied
+        let growth_premium = if (total_supply > 0) {
+            (pool.insurance_reserve * 100000000) / total_supply
+        } else {
+            0
+        };
+        
+        // Utilization premium
+        let utilization_premium = (pool.utilization_rate * 10000) / 10000; // Max 1% premium
+        
+        base_price + growth_premium + utilization_premium
+    }
+
+    /// Update growth based on utilization (can be called by anyone)
+    public fun update_growth(admin_addr: address) acquires InsurancePool, ManagedFungibleAsset {
+        assert!(exists<InsurancePool>(admin_addr), E_NOT_AUTHORIZED);
+        let pool = borrow_global_mut<InsurancePool>(admin_addr);
+        
+        let current_time = timestamp::now_microseconds();
+        let growth_interval = 86400000000; // 1 day in microseconds
+        
+        if (current_time < pool.last_growth_update + growth_interval) {
+            return // Not enough time passed
+        };
+        
+        let total_supply = pool.total_insurance_supply + pool.total_external_supply;
+        if (total_supply == 0) {
+            pool.last_growth_update = current_time;
+            return // No tokens to grow
+        };
+        
+        // Calculate periods elapsed
+        let periods_elapsed = (current_time - pool.last_growth_update) / growth_interval;
+        
+        // Calculate current growth rate based on utilization
+        let current_growth_rate = calculate_growth_rate(pool);
+        
+        // Apply compound growth for each period
+        let mut new_supply = total_supply;
+        let i = 0;
+        while (i < periods_elapsed) {
+            new_supply = (new_supply * (10000 + current_growth_rate)) / 10000;
+            i = i + 1;
+        };
+        
+        if (new_supply > total_supply) {
+            let growth_amount = new_supply - total_supply;
+            
+            // Mint growth to insurance reserve (increases token value for holders)
+            pool.insurance_reserve = pool.insurance_reserve + growth_amount;
+            pool.total_insurance_supply = pool.total_insurance_supply + growth_amount;
+            
+            // Emit event
+            event::emit_event(&mut pool.growth_events, GrowthEvent {
+                growth_amount,
+                new_insurance_reserve: pool.insurance_reserve,
+                utilization_rate: pool.utilization_rate,
+                timestamp: current_time,
+            });
+        };
+        
+        pool.last_growth_update = current_time;
+        pool.growth_rate = current_growth_rate;
+    }
+
+    /// Calculate current growth rate based on utilization
+    fun calculate_growth_rate(pool: &InsurancePool): u64 {
+        // Growth rate = base rate + (utilization * multiplier)
+        let rate = pool.base_growth_rate + (pool.utilization_rate * pool.utilization_multiplier) / 10000;
+        
+        // Cap at maximum
+        if (rate > pool.max_growth_rate) {
+            pool.max_growth_rate
+        } else {
+            rate
+        }
+    }
+
+    /// Update utilization rate (called by controller)
+    public fun update_utilization(
+        controller: &signer,
+        admin_addr: address,
+        new_utilization_rate: u64,
+    ) acquires InsurancePool {
+        let controller_addr = signer::address_of(controller);
+        assert!(exists<InsurancePool>(admin_addr), E_NOT_AUTHORIZED);
+        
+        let pool = borrow_global_mut<InsurancePool>(admin_addr);
+        assert!(table::contains(&pool.authorized_controllers, controller_addr), E_NOT_AUTHORIZED);
+        
+        pool.utilization_rate = new_utilization_rate;
+        
+        // Trigger growth update when utilization changes
+        update_growth(admin_addr);
+    }
+
+    /// Add supported asset for backing
+    public fun add_supported_asset(
+        admin: &signer,
+        admin_addr: address,
+        asset: address,
+    ) acquires InsurancePool {
+        let admin_addr_signer = signer::address_of(admin);
+        assert!(exists<InsurancePool>(admin_addr), E_NOT_AUTHORIZED);
+        
+        let pool = borrow_global_mut<InsurancePool>(admin_addr);
+        assert!(admin_addr_signer == admin_addr, E_NOT_AUTHORIZED);
+        
+        if (!table::contains(&pool.supported_assets, asset)) {
+            table::add(&mut pool.supported_assets, asset, true);
+            vector::push_back(&mut pool.backing_assets, asset);
+            
+            // Emit event
+            event::emit_event(&mut pool.mint_events, AssetSupportUpdatedEvent {
+                asset,
+                supported: true,
+            });
+        };
+    }
+
+    /// Remove supported asset
+    public fun remove_supported_asset(
+        admin: &signer,
+        admin_addr: address,
+        asset: address,
+    ) acquires InsurancePool {
+        let admin_addr_signer = signer::address_of(admin);
+        assert!(exists<InsurancePool>(admin_addr), E_NOT_AUTHORIZED);
+        
+        let pool = borrow_global_mut<InsurancePool>(admin_addr);
+        assert!(admin_addr_signer == admin_addr, E_NOT_AUTHORIZED);
+        
+        if (table::contains(&pool.supported_assets, asset)) {
+            table::remove(&mut pool.supported_assets, asset);
+            
+            // Remove from backing assets
+            let (found, index) = vector::index_of(&pool.backing_assets, &asset);
+            if (found) {
+                vector::remove(&mut pool.backing_assets, index);
+            };
+            
+            // Emit event
+            event::emit_event(&mut pool.mint_events, AssetSupportUpdatedEvent {
+                asset,
+                supported: false,
+            });
+        };
+    }
+
+    /// Update growth parameters
+    public fun update_growth_parameters(
+        admin: &signer,
+        admin_addr: address,
+        base_growth_rate: u64,
+        utilization_multiplier: u64,
+        max_growth_rate: u64,
+    ) acquires InsurancePool {
+        let admin_addr_signer = signer::address_of(admin);
+        assert!(exists<InsurancePool>(admin_addr), E_NOT_AUTHORIZED);
+        
+        let pool = borrow_global_mut<InsurancePool>(admin_addr);
+        assert!(admin_addr_signer == admin_addr, E_NOT_AUTHORIZED);
+        
+        pool.base_growth_rate = base_growth_rate;
+        pool.utilization_multiplier = utilization_multiplier;
+        pool.max_growth_rate = max_growth_rate;
+    }
+
+    /// Get growth metrics
+    public fun get_growth_metrics(admin_addr: address): (u64, u64, u64, u64) acquires InsurancePool {
+        assert!(exists<InsurancePool>(admin_addr), E_NOT_AUTHORIZED);
+        let pool = borrow_global<InsurancePool>(admin_addr);
+        
+        let current_price = get_current_price(admin_addr);
+        let current_growth_rate = calculate_growth_rate(pool);
+        
+        (current_price, current_growth_rate, pool.utilization_rate, pool.insurance_reserve)
+    }
+
+    /// Get backing information for an asset
+    public fun get_backing_info(admin_addr: address, asset: address): u64 acquires InsurancePool {
+        assert!(exists<InsurancePool>(admin_addr), E_NOT_AUTHORIZED);
+        let pool = borrow_global<InsurancePool>(admin_addr);
+        
+        if (table::contains(&pool.asset_backing, asset)) {
+            *table::borrow(&pool.asset_backing, asset)
+        } else {
+            0
+        }
+    }
+
+    /// Get supported assets
+    public fun get_supported_assets(admin_addr: address): vector<address> acquires InsurancePool {
+        assert!(exists<InsurancePool>(admin_addr), E_NOT_AUTHORIZED);
+        let pool = borrow_global<InsurancePool>(admin_addr);
+        pool.backing_assets
+    }
+
+    /// Check if asset is supported
+    public fun is_asset_supported(admin_addr: address, asset: address): bool acquires InsurancePool {
+        if (!exists<InsurancePool>(admin_addr)) {
+            return false
+        };
+        let pool = borrow_global<InsurancePool>(admin_addr);
+        table::contains(&pool.supported_assets, asset)
+    }
+
+    /// Get total PULLEY supply (external + insurance)
+    public fun get_total_supply(admin_addr: address): u64 acquires InsurancePool {
+        assert!(exists<InsurancePool>(admin_addr), E_NOT_AUTHORIZED);
+        let pool = borrow_global<InsurancePool>(admin_addr);
+        pool.total_insurance_supply + pool.total_external_supply
+    }
+
+    /// Get comprehensive insurance info
+    public fun get_insurance_info(admin_addr: address): (u64, u64, u64, u64, u64, u64, u64) acquires InsurancePool {
+        assert!(exists<InsurancePool>(admin_addr), E_NOT_AUTHORIZED);
+        let pool = borrow_global<InsurancePool>(admin_addr);
+        (
+            pool.total_insurance_supply,
+            pool.total_external_supply,
+            pool.total_absorbed_losses,
+            pool.profit_collected,
+            pool.market_utilization,
+            pool.insurance_reserve,
+            pool.total_backing_value
+        )
     }
 
     #[test_only]
