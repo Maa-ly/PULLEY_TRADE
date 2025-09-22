@@ -364,12 +364,7 @@ module pulley::controller {
         controller.trading_address
     }
 
-    /// Check if funds are available for allocation (for Blocklock automation)
-    public fun has_funds_to_allocate<CoinType>(controller_addr: address): bool acquires Controller {
-        assert!(exists<Controller<CoinType>>(controller_addr), E_CONTROLLER_NOT_INITIALIZED);
-        let _controller = borrow_global<Controller<CoinType>>(controller_addr);
-        coin::balance<CoinType>(controller_addr) > 0
-    }
+    // Removed earlier duplicate of has_funds_to_allocate; unified below.
 
     /// Trigger fund allocation from controller balance (for Blocklock automation)
     public fun allocate_available_funds<CoinType>(
@@ -444,11 +439,11 @@ module pulley::controller {
     fun generate_request_id(asset: address, amount: u64): vector<u8> {
         // Simplified request ID generation
         // In production, this would use proper hashing
-        let mut request_id = vector::empty<u8>();
-        vector::append(&mut request_id, std::bcs::to_bytes(&asset));
-        vector::append(&mut request_id, std::bcs::to_bytes(&amount));
-        vector::append(&mut request_id, std::bcs::to_bytes(&timestamp::now_microseconds()));
-        request_id
+        let request_id_part1 = std::bcs::to_bytes(&asset);
+        let request_id_part2 = std::bcs::to_bytes(&amount);
+        let request_id_part3 = std::bcs::to_bytes(&timestamp::now_microseconds());
+        let combined1 = vector::concat(request_id_part1, request_id_part2);
+        vector::concat(combined1, request_id_part3)
     }
 
     /// Check AI wallet PnL and handle funds
@@ -546,7 +541,7 @@ module pulley::controller {
             });
         } else if (pnl < 0) {
             // Loss case
-            let loss = ((-pnl) as u64);
+            let loss = (0 - pnl) as u64;
             controller.total_losses = controller.total_losses + loss;
             handle_trading_loss(controller, trade_request.asset, loss);
             
@@ -761,41 +756,9 @@ module pulley::controller {
         coin::balance<CoinType>(controller_addr) > 0
     }
 
-    /// Trigger fund allocation from controller balance (for Blocklock automation)
-    public fun allocate_available_funds<CoinType>(
-        admin: &signer,
-        controller_addr: address,
-    ) acquires Controller {
-        let admin_addr = signer::address_of(admin);
-        assert!(exists<Controller<CoinType>>(controller_addr), E_CONTROLLER_NOT_INITIALIZED);
-        
-        let controller = borrow_global<Controller<CoinType>>(controller_addr);
-        assert!(admin_addr == controller.admin_address, E_NOT_AUTHORIZED);
-        
-        let balance = coin::balance<CoinType>(controller_addr);
-        if (balance > 0) {
-            let funds = coin::withdraw<CoinType>(admin, balance);
-            // Re-deposit and allocate
-            coin::deposit(controller_addr, funds);
-            
-            // Emit automation event
-            event::emit_event(&mut controller.automation_events, AutomationEvent {
-                action: b"allocate_available_funds",
-                timestamp: timestamp::now_microseconds(),
-            });
-        };
-    }
+    // Removed earlier duplicate of allocate_available_funds; unified above.
 
-    /// Toggle controller active status (admin only)
-    public fun toggle_active<CoinType>(admin: &signer) acquires Controller {
-        let admin_addr = signer::address_of(admin);
-        assert!(exists<Controller<CoinType>>(admin_addr), E_CONTROLLER_NOT_INITIALIZED);
-        
-        let controller = borrow_global_mut<Controller<CoinType>>(admin_addr);
-        assert!(admin_addr == controller.admin_address, E_NOT_AUTHORIZED);
-        
-        controller.is_active = !controller.is_active;
-    }
+    // Removed earlier duplicate of toggle_active; unified above.
 
     #[test_only]
     public fun init_module_for_test<CoinType>(

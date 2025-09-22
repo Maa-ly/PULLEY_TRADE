@@ -4,7 +4,7 @@ version = "1.0.0"
 authors = []
 
 [addresses]
-pulley = "_"
+pulley = "default"
 
 [dev-addresses]
 pulley = "0x823879c074114afe53e8d1a745ce1388a53ed7144e91611ff5e00909e12d6efa"

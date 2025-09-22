@@ -5,6 +5,7 @@ module pulley::insurance_token {
     use std::signer;
     use std::string::{Self, utf8};
     use std::option;
+    use std::vector;
     use aptos_framework::fungible_asset::{Self, MintRef, TransferRef, BurnRef, Metadata};
     use aptos_framework::object::{Self, Object};
     use aptos_framework::primary_fungible_store;
@@ -319,12 +320,7 @@ module pulley::insurance_token {
         });
     }
 
-    /// Get insurance pool info
-    public fun get_insurance_info(admin_addr: address): (u64, u64, u64, u64, u64) acquires InsurancePool {
-        assert!(exists<InsurancePool>(admin_addr), E_NOT_AUTHORIZED);
-        let pool = borrow_global<InsurancePool>(admin_addr);
-        (pool.total_insurance_supply, pool.total_external_supply, pool.total_absorbed_losses, pool.profit_collected, pool.market_utilization)
-    }
+    // Removed duplicate of get_insurance_info with a shorter return tuple; see comprehensive version below.
 
     /// Check if controller is authorized
     public fun is_controller_authorized(admin_addr: address, controller: address): bool acquires InsurancePool {
@@ -342,12 +338,7 @@ module pulley::insurance_token {
         pool.total_insurance_supply
     }
 
-    /// Get total PULLEY supply (external + insurance)
-    public fun get_total_supply(admin_addr: address): u64 acquires InsurancePool {
-        assert!(exists<InsurancePool>(admin_addr), E_NOT_AUTHORIZED);
-        let pool = borrow_global<InsurancePool>(admin_addr);
-        pool.total_insurance_supply + pool.total_external_supply
-    }
+    // Removed earlier duplicate of get_total_supply; keeping a single definition below is sufficient.
 
     /// Update market utilization (for floating stablecoin price calculation)
     public fun update_market_utilization(controller: &signer, admin_addr: address, utilization: u64) acquires InsurancePool {
@@ -412,15 +403,16 @@ module pulley::insurance_token {
         let current_growth_rate = calculate_growth_rate(pool);
         
         // Apply compound growth for each period
-        let mut new_supply = total_supply;
-        let i = 0;
-        while (i < periods_elapsed) {
-            new_supply = (new_supply * (10000 + current_growth_rate)) / 10000;
-            i = i + 1;
+        let new_supply_initial = total_supply;
+        let mut_i = 0;
+        let mut_new_supply = new_supply_initial;
+        while (mut_i < periods_elapsed) {
+            mut_new_supply = (mut_new_supply * (10000 + current_growth_rate)) / 10000;
+            mut_i = mut_i + 1;
         };
         
-        if (new_supply > total_supply) {
-            let growth_amount = new_supply - total_supply;
+        if (mut_new_supply > total_supply) {
+            let growth_amount = mut_new_supply - total_supply;
             
             // Mint growth to insurance reserve (increases token value for holders)
             pool.insurance_reserve = pool.insurance_reserve + growth_amount;

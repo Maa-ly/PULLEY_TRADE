@@ -194,3 +194,4 @@ Potential improvements could include:
 - Automated rebalancing
 
 ## License
+aptos move publish --named-addresses pulley=default

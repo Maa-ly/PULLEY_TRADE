@@ -137,9 +137,9 @@ module pulley::clone_factory {
         let factory = borrow_global_mut<CloneFactory>(factory_addr);
         
         // Create strategy configuration
-        let mut asset_thresholds_table = table::new<address, u64>();
-        let mut asset_decimals_table = table::new<address, u8>();
-        let mut price_feeds_table = table::new<address, address>();
+        let asset_thresholds_table_mut = table::new<address, u64>();
+        let asset_decimals_table_mut = table::new<address, u8>();
+        let price_feeds_table_mut = table::new<address, address>();
         
         let i = 0;
         while (i < vector::length(&supported_assets)) {
@@ -148,9 +148,9 @@ module pulley::clone_factory {
             let decimals = *vector::borrow(&asset_decimals, i);
             let price_feed = *vector::borrow(&price_feeds, i);
             
-            table::add(&mut asset_thresholds_table, asset, threshold);
-            table::add(&mut asset_decimals_table, asset, decimals);
-            table::add(&mut price_feeds_table, asset, price_feed);
+            table::add(&mut asset_thresholds_table_mut, asset, threshold);
+            table::add(&mut asset_decimals_table_mut, asset, decimals);
+            table::add(&mut price_feeds_table_mut, asset, price_feed);
             
             i = i + 1;
         };
@@ -160,9 +160,9 @@ module pulley::clone_factory {
             strategy_symbol,
             threshold_amount,
             supported_assets,
-            asset_thresholds: asset_thresholds_table,
-            asset_decimals: asset_decimals_table,
-            price_feeds: price_feeds_table,
+            asset_thresholds: asset_thresholds_table_mut,
+            asset_decimals: asset_decimals_table_mut,
+            price_feeds: price_feeds_table_mut,
             is_active: true,
             created_at: timestamp::now_microseconds(),
         };

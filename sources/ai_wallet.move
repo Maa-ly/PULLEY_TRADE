@@ -209,7 +209,8 @@ module pulley::ai_wallet {
         if (pnl > 0) {
             wallet.total_profits = wallet.total_profits + (pnl as u64);
         } else if (pnl < 0) {
-            wallet.total_losses = wallet.total_losses + ((-pnl) as u64);
+            let neg_pnl_u64 = (0 - pnl) as u64;
+            wallet.total_losses = wallet.total_losses + neg_pnl_u64;
         };
         
         // Emit events

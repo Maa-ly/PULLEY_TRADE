@@ -4,6 +4,7 @@
 module pulley::trading_pool {
     use std::signer;
     use std::string;
+    use std::vector;
     use aptos_framework::coin::{Self, Coin, MintCapability, BurnCapability, FreezeCapability};
     use aptos_framework::account;
     use aptos_framework::event::{Self, EventHandle};
@@ -679,55 +680,13 @@ module pulley::trading_pool {
         });
     }
 
-    /// Update threshold amount (admin only)
-    public fun update_threshold<CoinType>(
-        admin: &signer,
-        new_threshold: u64,
-    ) acquires TradingPool {
-        let admin_addr = signer::address_of(admin);
-        assert!(exists<TradingPool<CoinType>>(admin_addr), E_POOL_NOT_INITIALIZED);
-        
-        let pool = borrow_global_mut<TradingPool<CoinType>>(admin_addr);
-        assert!(admin_addr == pool.admin_address, E_NOT_AUTHORIZED);
-        
-        pool.threshold_amount = new_threshold;
-    }
+    
 
-    /// Update controller address (admin only)
-    public fun update_controller<CoinType>(
-        admin: &signer,
-        new_controller: address,
-    ) acquires TradingPool {
-        let admin_addr = signer::address_of(admin);
-        assert!(exists<TradingPool<CoinType>>(admin_addr), E_POOL_NOT_INITIALIZED);
-        
-        let pool = borrow_global_mut<TradingPool<CoinType>>(admin_addr);
-        assert!(admin_addr == pool.admin_address, E_NOT_AUTHORIZED);
-        
-        pool.controller_address = new_controller;
-    }
+    
 
-    /// Get pool information
-    public fun get_pool_info<CoinType>(admin_addr: address): (u64, u64, u64, bool) acquires TradingPool {
-        assert!(exists<TradingPool<CoinType>>(admin_addr), E_POOL_NOT_INITIALIZED);
-        let pool = borrow_global<TradingPool<CoinType>>(admin_addr);
-        (pool.total_deposited, pool.total_pool_tokens, pool.threshold_amount, pool.is_active)
-    }
+    
 
-    /// Get user's pool token balance and deposit amount
-    public fun get_user_info<CoinType>(admin_addr: address, user_addr: address): (u64, u64) acquires TradingPool {
-        assert!(exists<TradingPool<CoinType>>(admin_addr), E_POOL_NOT_INITIALIZED);
-        let pool = borrow_global<TradingPool<CoinType>>(admin_addr);
-        
-        let user_deposit = if (table::contains(&pool.user_deposits, user_addr)) {
-            *table::borrow(&pool.user_deposits, user_addr)
-        } else {
-            0
-        };
-        
-        let pool_token_balance = coin::balance<PoolToken>(user_addr);
-        (user_deposit, pool_token_balance)
-    }
+    
 
     /// Add supported asset with decimals and threshold
     public fun add_asset<CoinType>(
@@ -997,7 +956,7 @@ module pulley::trading_pool {
             (profit, 0)
         } else if (period.period_pnl < 0) {
             // Loss scenario
-            let total_loss = (-period.period_pnl) as u64;
+            let total_loss = (0 - period.period_pnl) as u64;
             let loss = if (period.total_usd_value_at_start > 0) {
                 (user_contribution * total_loss) / period.total_usd_value_at_start
             } else {
