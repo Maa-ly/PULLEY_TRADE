@@ -174,10 +174,9 @@ module pulley::ai_wallet {
         let wallet = borrow_global_mut<AIWallet<CoinType>>(admin_addr);
         assert!(wallet.is_active, E_NOT_AUTHORIZED);
         assert!(amount > 0, E_INVALID_AMOUNT);
-        
-        // Verify signature (simplified - in production would use proper signature verification)
+       
         // For now, we'll skip signature verification for testing
-        // In production, this would verify the signature against the ai_signer_address
+        // this would verify the signature against the ai_signer_address
         
         // Check balance
         let current_balance = coin::balance<CoinType>(admin_addr);
@@ -312,7 +311,7 @@ module pulley::ai_wallet {
         let wallet = borrow_global<AIWallet<CoinType>>(admin_addr);
         assert!(controller_addr == wallet.controller_address, E_NOT_AUTHORIZED);
         
-        // This would integrate with price oracle in production
+        // This would integrate with price oracle 
         // For now, just a placeholder
     }
 

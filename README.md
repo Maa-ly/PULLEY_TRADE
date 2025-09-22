@@ -1,184 +1,196 @@
-# Pulley Protocol - Complete Aptos Implementation
+# Pulley DeFi Trading Pool System
 
-## Overview
+A comprehensive DeFi system built on Aptos that enables users to participate in yield-bearing trading pools with built-in insurance mechanisms.
 
-This is a complete implementation of the Pulley Protocol on Aptos, ported from the original EVM version. The Pulley Protocol is a DeFi trading system that combines AI-driven strategies with insurance via a floating stablecoin, providing a comprehensive solution for automated trading with risk management.
+## System Overview
+
+The Pulley system consists of four main components:
+
+1. **Trading Pool** - Users deposit funds and receive pool tokens representing their share
+2. **Controller** - Manages fund allocation across different yield strategies
+3. **Yield Vaults** - Execute different yield-bearing strategies (lending, liquidity mining, staking)
+4. **Insurance Token** - Provides loss protection through a floating stablecoin mechanism
 
 ## Architecture
 
-### Core Components
+```
+User Deposits → Trading Pool → Controller → Yield Vaults
+                     ↓              ↓
+                Insurance ← 10% + 5% of profits
+```
 
-1. **Trading Pool** (`trading_pool.move`)
-   - Manages user deposits and withdrawals
-   - Implements continuous trading periods
-   - Handles profit distribution and insurance refunds
-   - Integrates with price oracles for asset valuation
+### Fund Allocation Flow
 
-2. **Controller** (`controller.move`)
-   - Central orchestrator for the protocol
-   - Manages fund allocation (15% insurance, 85% trading)
-   - Handles AI wallet integration and PnL reporting
-   - Distributes profits and manages losses
+1. Users deposit funds into the trading pool and receive pool tokens
+2. When the pool balance reaches a threshold, funds are automatically transferred to the controller
+3. The controller splits funds as follows:
+   - **10%** → Insurance token minting
+   - **30%** → Yield Vault 1 (Lending Strategy)
+   - **30%** → Yield Vault 2 (Liquidity Mining Strategy)  
+   - **30%** → Yield Vault 3 (Staking Strategy)
 
-3. **Insurance Token** (`insurance_token.move`)
-   - Implements floating price mechanism
-   - Manages growth algorithm and utilization rates
-   - Provides dual minting logic (external and insurance)
-   - Handles loss absorption via burning
+### Profit/Loss Mechanism
 
-4. **AI Wallet** (`ai_wallet.move`)
-   - Manages AI trading sessions
-   - Handles signature-based transfers
-   - Provides session tracking and balance management
-   - Integrates with controller for PnL reporting
+**Profits:**
+- **5%** of profits go to insurance token minting
+- **95%** of profits are distributed to pool token holders
 
-5. **Clone Factory** (`clone_factory.move`)
-   - Enables strategy creation and customization
-   - Manages strategy configurations and parameters
-   - Provides quick clone creation functionality
-   - Tracks strategy instances and creators
+**Losses:**
+- Insurance tokens are burned first to absorb losses
+- Only after insurance is depleted do losses affect the trading pool
+- Users outside the trading pool can mint insurance tokens for additional protection
 
-6. **Permission Manager** (`permission_manager.move`)
-   - Implements role-based access control
-   - Manages user permissions and roles
-   - Provides security for protocol operations
-   - Supports custom role creation
+## Smart Contracts
 
-7. **Price Oracle** (`price_oracle.move`)
-   - Integrates with external price feeds
-   - Provides asset valuation services
-   - Manages price updates and validation
-   - Supports batch operations and emergency updates
+### 1. Insurance Token (`insurance_token.move`)
 
-## Key Features
+- **Purpose**: Floating stablecoin that provides loss insurance
+- **Key Features**:
+  - Anyone can mint insurance tokens
+  - Automatically absorbs trading losses
+  - Receives 5% of all trading profits
+  - Authorized controllers can burn tokens to cover losses
 
-### 1. Continuous Trading Periods
-- Trading pools manage multiple concurrent periods
-- Threshold-based fund transfers to controller
-- User contribution tracking per period
-- Profit distribution and insurance refunds
+**Main Functions:**
+- `initialize(admin)` - Setup the insurance system
+- `mint_insurance(recipient, admin_addr, amount)` - Mint insurance tokens
+- `absorb_loss(controller, admin_addr, loss_amount)` - Absorb trading losses
+- `deposit_profit(controller, admin_addr, profit_amount)` - Deposit profits
 
-### 2. Floating Stablecoin (PUL)
-- Dynamic pricing based on utilization and performance
-- Growth algorithm with configurable parameters
-- Dual minting logic for external and insurance use
-- Loss absorption mechanism via burning
+### 2. Trading Pool (`trading_pool.move`)
 
-### 3. AI Trading Integration
-- External AI system interaction via AI Wallet
-- Session-based trading management
-- Signature-based fund transfers
-- PnL reporting and tracking
+- **Purpose**: Main entry point for user deposits and withdrawals
+- **Key Features**:
+  - Issues pool tokens proportional to deposits
+  - Automatic threshold-based fund transfer to controller
+  - Profit distribution to token holders
+  - Withdrawal based on pool token ownership
 
-### 4. Fund Allocation
-- 15% allocated to insurance pool
-- 85% allocated to AI trading
-- Automatic rebalancing based on performance
-- Profit distribution (10% insurance, 90% traders)
+**Main Functions:**
+- `initialize<CoinType>(admin, threshold_amount, controller_address)` - Setup pool
+- `deposit<CoinType>(user, admin_addr, deposit_coins)` - Deposit funds
+- `withdraw<CoinType>(user, admin_addr, pool_tokens_to_burn)` - Withdraw funds
+- `distribute_profit<CoinType>(controller, admin_addr, profit_coins, insurance_share)` - Distribute profits
 
-### 5. Clone Factory
-- Create custom trading strategies
-- Configurable parameters and assets
-- Quick clone creation for common use cases
-- Strategy management and tracking
+### 3. Controller (`controller.move`)
 
-### 6. Permission System
-- Role-based access control
-- Granular permission management
-- Custom role creation
-- Security for protocol operations
+- **Purpose**: Central fund management and allocation
+- **Key Features**:
+  - Splits incoming funds according to predefined percentages
+  - Manages interactions with yield vaults
+  - Handles profit/loss reporting
+  - Coordinates with insurance system
 
-## System Flow
+**Main Functions:**
+- `initialize<CoinType>(admin, trading_pool_address, insurance_admin_address, vault_addresses)` - Setup controller
+- `allocate_funds<CoinType>(pool_signer, controller_addr, funds)` - Allocate funds to vaults
+- `report_profit<CoinType>(vault, controller_addr, profit_coins)` - Handle vault profits
+- `report_loss<CoinType>(vault, controller_addr, loss_amount)` - Handle vault losses
 
-1. **User Deposit**: Users deposit assets into the trading pool
-2. **Fund Allocation**: 15% goes to insurance, 85% to AI trading
-3. **AI Trading**: AI system trades with allocated funds
-4. **PnL Reporting**: AI reports profit/loss to controller
-5. **Profit Distribution**: 10% to insurance, 90% to traders
-6. **Loss Handling**: Insurance pool covers losses
-7. **Token Growth**: PUL token price adjusts based on performance
+### 4. Yield Vault (`yield_vault.move`)
 
-## Token Economics
+- **Purpose**: Execute yield-bearing strategies
+- **Key Features**:
+  - Multiple strategy types (lending, liquidity mining, staking)
+  - Automated yield harvesting
+  - Performance fee collection
+  - Loss reporting to controller
 
-- **PUL Token**: Floating stablecoin with dynamic pricing
-- **Growth Algorithm**: Based on utilization and performance
-- **Minting Logic**: Dual minting for external and insurance use
-- **Burning Mechanism**: Loss absorption and price stability
+**Strategy Types:**
+- **Type 1**: Lending Strategy (5% APY target)
+- **Type 2**: Liquidity Mining Strategy (8% APY target)
+- **Type 3**: Staking Strategy (6% APY target)
 
-## Development
+**Main Functions:**
+- `initialize<CoinType>(admin, controller_address, strategy_type, strategy_name, performance_fee)` - Setup vault
+- `deposit<CoinType>(controller, vault_addr, deposit_coins)` - Receive funds from controller
+- `harvest<CoinType>(harvester, vault_addr)` - Harvest yield and distribute
+- `report_loss<CoinType>(vault_admin, vault_addr, loss_amount)` - Report losses
 
-### Prerequisites
-- Aptos CLI
-- Move compiler
-- Node.js
+## Usage Examples
 
-### Setup
-1. Clone repository
-2. Install dependencies
-3. Initialize Aptos environment
-4. Deploy contracts
+### 1. Deploy the System
 
-### Testing
+```move
+// Initialize insurance token
+insurance_token::initialize(admin);
+
+// Initialize trading pool with 1000 APT threshold
+trading_pool::initialize<AptosCoin>(admin, 1000 * 100000000, controller_address);
+
+// Initialize controller
+let vault_addresses = vector[vault1_addr, vault2_addr, vault3_addr];
+controller::initialize<AptosCoin>(admin, trading_pool_addr, insurance_admin_addr, vault_addresses);
+
+// Initialize yield vaults
+yield_vault::initialize<AptosCoin>(vault1_admin, controller_addr, 1, b"Lending Strategy", 200);
+yield_vault::initialize<AptosCoin>(vault2_admin, controller_addr, 2, b"Liquidity Mining", 300);
+yield_vault::initialize<AptosCoin>(vault3_admin, controller_addr, 3, b"Staking Strategy", 250);
+```
+
+### 2. User Operations
+
+```move
+// User deposits into trading pool
+let deposit_coins = coin::withdraw<AptosCoin>(user, 500 * 100000000); // 500 APT
+trading_pool::deposit<AptosCoin>(user, pool_admin_addr, deposit_coins);
+
+// User mints insurance tokens
+insurance_token::mint_insurance(user, insurance_admin_addr, 100 * 100000000); // 100 tokens
+
+// User withdraws from pool
+let pool_tokens_to_burn = 250 * 100000000; // Half of pool tokens
+let withdrawn_coins = trading_pool::withdraw<AptosCoin>(user, pool_admin_addr, pool_tokens_to_burn);
+```
+
+### 3. Vault Operations
+
+```move
+// Harvest yield from vault
+yield_vault::harvest<AptosCoin>(harvester, vault_addr);
+
+// Report loss from vault
+yield_vault::report_loss<AptosCoin>(vault_admin, vault_addr, 50 * 100000000); // 50 APT loss
+```
+
+## Testing
+
+The system includes comprehensive tests covering:
+
+- Full system integration flow
+- Insurance token operations
+- Vault strategy implementations
+- Controller fund allocation
+- Profit/loss distribution mechanisms
+
+Run tests with:
 ```bash
 aptos move test
 ```
 
-The test suite includes comprehensive coverage of all functionality.
 
-## Deployment
 
-1. Deploy core contracts in order:
-   - Price Oracle
-   - Permission Manager
-   - Insurance Token
-   - Trading Pool
-   - Controller
-   - AI Wallet
-   - Clone Factory
+### Key Parameters
 
-2. Initialize contracts with proper addresses
-3. Configure permissions and roles
-4. Set up price feeds
-5. Deploy and test
+- **Insurance Allocation**: 10% of all deposits
+- **Vault Allocation**: 30% each to three vaults
+- **Profit Insurance Share**: 5% of all profits
+- **Maximum Performance Fee**: 20% (2000 basis points)
 
-## Integration
+### Threshold Settings
 
-- **Price Feeds**: Pyth Network integration
-- **AI Systems**: External AI wallet integration
-- **Automation**: Blocklock integration
-- **Frontend**: Web3 wallet integration
+- **Pool Threshold**: Configurable amount that triggers fund transfer to controller
+- **Performance Fees**: Configurable per vault (0-20%)
 
-## Security
 
-- Role-based access control
-- Multi-signature requirements
-- Time-locked operations
-- Emergency pause functionality
+## Future Enhancements
+
+Potential improvements could include:
+- Additional yield strategies
+- Dynamic allocation percentages
+- Governance mechanisms
+- Cross-chain bridge support
+- Advanced risk management
+- Automated rebalancing
 
 ## License
-
-MIT License
-
-## Contributing
-
-1. Fork repository
-2. Create feature branch
-3. Implement changes
-4. Add tests
-5. Submit pull request
-
-## Support
-
-- Documentation: [Link to docs]
-- Discord: [Link to Discord]
-- GitHub Issues: [Link to issues]
-- Email: [Contact email]
-
-## Changelog
-
-### v1.0.0 - Complete Aptos Implementation
-- Full port from EVM to Aptos
-- All core contracts implemented
-- Comprehensive test suite
-- Complete documentation
-- Security audit ready

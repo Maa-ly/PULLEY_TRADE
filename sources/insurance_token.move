@@ -118,7 +118,7 @@ module pulley::insurance_token {
             utf8(ASSET_NAME), /* name */
             utf8(ASSET_SYMBOL), /* symbol */
             8, /* decimals */
-            utf8(b"http://example.com/pulley-icon.ico"), /* icon */
+            utf8(b"http://example.com/pulley-icon.ico"), /* icon */ //replace - make one
             utf8(b"http://pulley.finance"), /* project */
         );
 
